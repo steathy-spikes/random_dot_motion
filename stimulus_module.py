@@ -3,6 +3,7 @@ from direct.showbase.ShowBase import ShowBase
 from multiprocessing import Process
 import numpy as np
 import os
+import cv2
 import sys
 
 dot_motion_coherence_shader = [
@@ -16,7 +17,7 @@ dot_motion_coherence_shader = [
         uniform int number_of_dots;
         uniform float size_of_dots;
         uniform float radius;
-        
+
         out float dot_color;
 
         void main(void) {
@@ -27,7 +28,7 @@ dot_motion_coherence_shader = [
             vec4 dot_properties;
 
             dot_i = float(p3d_Vertex[1]);
-            dot_properties = texture2D(p3d_Texture0, vec2(dot_i/maxi, 0.0));
+            dot_properties = texture(p3d_Texture0, vec2(dot_i/maxi, 0.0));
 
             dot_x = dot_properties[2];
             dot_y = dot_properties[1];
@@ -51,13 +52,14 @@ dot_motion_coherence_shader = [
 
     """ #version 140
         in float dot_color;
-        //out vec4 gl_FragColor;
+        out vec4 frag_color;
 
         void main() {
-            gl_FragColor = vec4(dot_color, dot_color, dot_color, 1);
+            frag_color = vec4(dot_color, dot_color, dot_color, 1);
         }
     """
 ]
+
 
 class MyApp(ShowBase):
     def __init__(self, shared):
@@ -66,6 +68,7 @@ class MyApp(ShowBase):
 
         loadPrcFileData("",
                         """fullscreen 0
+                           gl-version 3 2
                            win-origin 100 100
                            win-size 800 800
                            sync-video 0
@@ -78,10 +81,10 @@ class MyApp(ShowBase):
         # Update the lense
         self.disableMouse()
 
-
         ############
         # Compile the motion shader
-        self.compiled_dot_motion_shader = Shader.make(Shader.SLGLSL, dot_motion_coherence_shader[0], dot_motion_coherence_shader[1])
+        self.compiled_dot_motion_shader = Shader.make(Shader.SLGLSL, dot_motion_coherence_shader[0],
+                                                      dot_motion_coherence_shader[1])
 
         filepath = os.path.join(os.path.split(__file__)[0], "circles.bam")
         self.circles = self.loader.loadModel(Filename.fromOsSpecific(filepath))
@@ -104,9 +107,9 @@ class MyApp(ShowBase):
         self.circles.setShader(self.compiled_dot_motion_shader)
 
         self.dots_position = np.empty((1, 10000, 3)).astype(np.float32)
-        self.dots_position[0, :, 0] = 2*np.random.random(10000).astype(np.float32) - 1 # x
-        self.dots_position[0, :, 1] = 2*np.random.random(10000).astype(np.float32) - 1 # y
-        self.dots_position[0, :, 2] = np.ones(10000)*self.shared.stimulus_properties_brightness_of_dots.value
+        self.dots_position[0, :, 0] = 2 * np.random.random(10000).astype(np.float32) - 1  # x
+        self.dots_position[0, :, 1] = 2 * np.random.random(10000).astype(np.float32) - 1  # y
+        self.dots_position[0, :, 2] = np.ones(10000) * self.shared.stimulus_properties_brightness_of_dots.value
 
         memoryview(self.dummytex.modify_ram_image())[:] = self.dots_position.tobytes()
 
@@ -150,7 +153,8 @@ class MyApp(ShowBase):
             self.shared.stimulus_properties_update_requested.value = 0
 
             random_vector = np.random.randint(100, size=10000)
-            self.coherent_change_vector_ind = np.where(random_vector < self.shared.stimulus_properties_coherence_of_dots.value)
+            self.coherent_change_vector_ind = np.where(
+                random_vector < self.shared.stimulus_properties_coherence_of_dots.value)
 
             ######
             # Update the shader variables
@@ -163,10 +167,12 @@ class MyApp(ShowBase):
         self.last_time = task.time
 
         #####
-        self.dots_position[0, :, 0][self.coherent_change_vector_ind] += np.cos(self.shared.stimulus_properties_direction_of_dots.value*np.pi/180) * \
+        self.dots_position[0, :, 0][self.coherent_change_vector_ind] += np.cos(
+            self.shared.stimulus_properties_direction_of_dots.value * np.pi / 180) * \
                                                                         self.shared.stimulus_properties_speed_of_dots.value * \
                                                                         dt
-        self.dots_position[0, :, 1][self.coherent_change_vector_ind] += np.sin(self.shared.stimulus_properties_direction_of_dots.value*np.pi/180) * \
+        self.dots_position[0, :, 1][self.coherent_change_vector_ind] += np.sin(
+            self.shared.stimulus_properties_direction_of_dots.value * np.pi / 180) * \
                                                                         self.shared.stimulus_properties_speed_of_dots.value * \
                                                                         dt
 
@@ -179,13 +185,40 @@ class MyApp(ShowBase):
 
         self.dots_position[0, :, 0][ind] = 2 * np.random.random(len(ind)).astype(np.float32) - 1  # x
         self.dots_position[0, :, 1][ind] = 2 * np.random.random(len(ind)).astype(np.float32) - 1  # y
-        self.dots_position[0, :, 2] = np.ones(10000)*self.shared.stimulus_properties_brightness_of_dots.value
+        self.dots_position[0, :, 2] = np.ones(10000) * self.shared.stimulus_properties_brightness_of_dots.value
 
         # Wrap them
         self.dots_position[0, :, 0] = (self.dots_position[0, :, 0] + 1) % 2 - 1
         self.dots_position[0, :, 1] = (self.dots_position[0, :, 1] + 1) % 2 - 1
 
         memoryview(self.dummytex.modify_ram_image())[:] = self.dots_position.tobytes()
+        # # memoryview(self.dummytex.get_ram_image())
+        # print(self.win.size)
+        # print(type(memoryview(self.dummytex.get_ram_image())))
+        # img = np.frombuffer(memoryview((self.circles.get_texture().get_ram_image())))
+        #
+        # screenshot = PNMImage()
+        #
+        # print(img, img.shape)
+
+        screenshot = self.win.getScreenshot()
+        screenshot_byte_array = screenshot.getRamImageAs('RGBA')
+
+        # Convert the screenshot to a NumPy array
+        img_array = np.frombuffer(screenshot_byte_array, dtype=np.uint8)
+        img_array = img_array.reshape((screenshot.getYSize(), screenshot.getXSize(), 4))
+
+        # Optionally, remove the alpha channel if not needed
+        img_array = img_array[:, :, :3]
+        print(img_array.shape)
+
+
+
+        # img = img.reshape((400, 400, 1))
+        img = img_array[::-1]
+        cv2.imshow('img', img)
+        cv2.waitKey(0)
+
 
         return task.cont
 
@@ -199,3 +232,4 @@ class StimulusModule(Process):
     def run(self):
         app = MyApp(self.shared)
         app.run()
+
