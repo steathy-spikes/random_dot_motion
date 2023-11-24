@@ -6,6 +6,35 @@ import os
 import cv2
 import sys
 
+PREV_FRAME = None
+
+
+def optical_flow_image(prev_frame, curr_frame):
+    # code based from https://www.geeksforgeeks.org/python-opencv-dense-optical-flow/
+    prev_gray = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
+    curr_gray = cv2.cvtColor(curr_frame, cv2.COLOR_BGR2GRAY)
+    mask = np.zeros_like(prev_frame)
+    try:
+        # Sets image saturation to maximum
+        mask[..., 1] = 255
+
+        flow = cv2.calcOpticalFlowFarneback(prev=prev_gray, next=curr_gray,
+                                            flow=None,
+                                            pyr_scale=0.5, levels=3, winsize=3, iterations=3, poly_n=5, poly_sigma=1.2,
+                                            flags=0)
+
+        magnitude, angle = cv2.cartToPolar(flow[..., 0], flow[..., 1])
+        # hue -> The colour determines the angle
+        mask[..., 0] = angle * 180 / np.pi / 2
+        # value -> The value of hue which is determined by magnitude
+        mask[..., 2] = cv2.normalize(magnitude, None, 0, 255, cv2.NORM_MINMAX)
+
+        optical_flow_rgb = cv2.cvtColor(mask, cv2.COLOR_HSV2BGR)
+    except cv2.error:
+        optical_flow_rgb = cv2.cvtColor(mask, cv2.COLOR_HSV2BGR)
+    return optical_flow_rgb
+
+
 dot_motion_coherence_shader = [
     """ #version 140
 
@@ -210,15 +239,26 @@ class MyApp(ShowBase):
 
         # Optionally, remove the alpha channel if not needed
         img_array = img_array[:, :, :3]
-        print(img_array.shape)
-
-
+        # print(img_array.shape)
 
         # img = img.reshape((400, 400, 1))
         img = img_array[::-1]
-        cv2.imshow('img', img)
-        cv2.waitKey(0)
 
+        global PREV_FRAME
+
+        # print(PREV_FRAME)
+        # print("img_shape", img.shape)
+
+        if PREV_FRAME is None:
+            PREV_FRAME = img
+            # print("img_shape", PREV_FRAME.shape)
+
+        optical_flow_img = optical_flow_image(prev_frame=PREV_FRAME, curr_frame=img)
+
+        PREV_FRAME = img
+
+        cv2.imshow('img', optical_flow_img)
+        cv2.waitKey(0)
 
         return task.cont
 
@@ -232,4 +272,3 @@ class StimulusModule(Process):
     def run(self):
         app = MyApp(self.shared)
         app.run()
-
