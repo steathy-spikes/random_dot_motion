@@ -3,13 +3,23 @@
 arminbahl@fas.harvard.edu
 """
 
+import argparse
+
 if __name__ == "__main__":
+
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--plot", action="store_true")
+    args = vars(ap.parse_args())
+
+    plot = args["plot"]
+    print(f"Plot: {plot}")
+
 
     from shared import Shared
 
     shared = Shared()
-    shared.load_values()
-    shared.start_threads()
+    # shared.load_values()
+    shared.start_threads(plot = plot)
 
     import os
     import sys
@@ -122,9 +132,15 @@ if __name__ == "__main__":
             self.shared.running.value = 0
             self.close()
 
+
+    # print("ak,sdjfkladsjf")
+    # exit(0)
+
     app = QtWidgets.QApplication(sys.argv)
 
     main = GUI_Dialog()
+
+
 
     main.show()
     app.exec_()

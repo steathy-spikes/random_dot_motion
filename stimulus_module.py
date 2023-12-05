@@ -7,16 +7,19 @@ import cv2
 import sys
 
 PREV_FRAME = None
+TIMESTEP = -3
 
 
 def optical_flow_image(prev_frame, curr_frame):
     # code based from https://www.geeksforgeeks.org/python-opencv-dense-optical-flow/
     prev_gray = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
     curr_gray = cv2.cvtColor(curr_frame, cv2.COLOR_BGR2GRAY)
-    mask = np.zeros_like(prev_frame)
+    mask_x = np.zeros_like(prev_frame)
+    mask_y = np.zeros_like(prev_frame)
     try:
         # Sets image saturation to maximum
-        mask[..., 1] = 255
+        mask_x[..., 1] = 255
+        mask_y[..., 1] = 255
 
         flow = cv2.calcOpticalFlowFarneback(prev=prev_gray, next=curr_gray,
                                             flow=None,
@@ -24,15 +27,29 @@ def optical_flow_image(prev_frame, curr_frame):
                                             flags=0)
 
         magnitude, angle = cv2.cartToPolar(flow[..., 0], flow[..., 1])
+        # print("angle", angle.shape)
         # hue -> The colour determines the angle
-        mask[..., 0] = angle * 180 / np.pi / 2
+        magnitude_x = magnitude * np.abs(np.cos(angle))
+        magnitude_y = magnitude * np.abs(np.sin(angle))
+        angle[np.where(np.logical_and(angle > 0, angle < 180))] = 255
+        angle[np.where(np.logical_and(angle > 180, angle < 360))] = 1
+        # if angle > 0 and angle < 180:
+        #     angle = 255
+        # if angle > 180 and angle < 360:
+        #     angle = 1
+        # mask_x[..., 0] = angle * 180 / np.pi / 2
+        mask_x[..., 0] = angle
+        mask_y[..., 0] = angle
         # value -> The value of hue which is determined by magnitude
-        mask[..., 2] = cv2.normalize(magnitude, None, 0, 255, cv2.NORM_MINMAX)
+        mask_x[..., 2] = cv2.normalize(magnitude_x, None, 0, 255, cv2.NORM_MINMAX)
+        mask_y[..., 2] = cv2.normalize(magnitude_y, None, 0, 255, cv2.NORM_MINMAX)
 
-        optical_flow_rgb = cv2.cvtColor(mask, cv2.COLOR_HSV2BGR)
+        optical_flow_rgb_x = cv2.cvtColor(mask_x, cv2.COLOR_HSV2BGR)
+        optical_flow_rgb_y = cv2.cvtColor(mask_y, cv2.COLOR_HSV2BGR)
     except cv2.error:
-        optical_flow_rgb = cv2.cvtColor(mask, cv2.COLOR_HSV2BGR)
-    return optical_flow_rgb
+        optical_flow_rgb_x = cv2.cvtColor(mask_x, cv2.COLOR_HSV2BGR)
+        optical_flow_rgb_y = cv2.cvtColor(mask_y, cv2.COLOR_HSV2BGR)
+    return optical_flow_rgb_x, optical_flow_rgb_y
 
 
 dot_motion_coherence_shader = [
@@ -91,9 +108,10 @@ dot_motion_coherence_shader = [
 
 
 class MyApp(ShowBase):
-    def __init__(self, shared):
+    def __init__(self, shared, plot):
 
         self.shared = shared
+        self.plot = plot
 
         loadPrcFileData("",
                         """fullscreen 0
@@ -237,6 +255,8 @@ class MyApp(ShowBase):
         img_array = np.frombuffer(screenshot_byte_array, dtype=np.uint8)
         img_array = img_array.reshape((screenshot.getYSize(), screenshot.getXSize(), 4))
 
+        print("img_array_shape", img_array.shape)
+
         # Optionally, remove the alpha channel if not needed
         img_array = img_array[:, :, :3]
         # print(img_array.shape)
@@ -245,6 +265,7 @@ class MyApp(ShowBase):
         img = img_array[::-1]
 
         global PREV_FRAME
+        global TIMESTEP
 
         # print(PREV_FRAME)
         # print("img_shape", img.shape)
@@ -253,22 +274,63 @@ class MyApp(ShowBase):
             PREV_FRAME = img
             # print("img_shape", PREV_FRAME.shape)
 
-        optical_flow_img = optical_flow_image(prev_frame=PREV_FRAME, curr_frame=img)
+        optical_flow_img_x, optical_flow_img_y = optical_flow_image(prev_frame=PREV_FRAME, curr_frame=img)
 
         PREV_FRAME = img
 
-        cv2.imshow('img', optical_flow_img)
-        cv2.waitKey(0)
+        print("optical_flow_img", optical_flow_img_x.shape)
+
+        if self.plot:
+            n_dots = self.shared.stimulus_properties_number_of_dots.value
+            coherence = self.shared.stimulus_properties_coherence_of_dots.value
+            direction = self.shared.stimulus_properties_direction_of_dots.value
+            lifetime = self.shared.stimulus_properties_lifetime_of_dots.value
+            size = self.shared.stimulus_properties_size_of_dots.value
+            speed = self.shared.stimulus_properties_speed_of_dots.value
+
+
+            dir_name = f"coh_{coherence}_dir_{direction}_speed_{speed}_ndots_{n_dots}_lifetime_{lifetime}_size_{size}"
+            total_dir = os.path.join("saved_runs", dir_name)
+            if not os.path.exists(total_dir):
+                os.makedirs(total_dir)
+
+            total_img_dir = os.path.join(total_dir, "img")
+            if not os.path.exists(total_img_dir):
+                os.makedirs(total_img_dir)
+
+            total_npy_dir = os.path.join(total_dir, "npy")
+            if not os.path.exists(total_npy_dir):
+                os.makedirs(total_npy_dir)
+
+            # the first frame is 800 by 800.
+            # The starting TIMESTEP is -3 to not save the first few frames
+            if TIMESTEP >= 0:
+
+                np.save(file=os.path.join(total_npy_dir, f"optical_flow_img_x_{TIMESTEP}.npy"), arr=optical_flow_img_x)
+                np.save(file=os.path.join(total_npy_dir, f"optical_flow_img_y_{TIMESTEP}.npy"), arr=optical_flow_img_y)
+
+                cv2.imwrite(os.path.join(total_img_dir, f"optical_flow_img_x_{TIMESTEP}.png"), optical_flow_img_x)
+                cv2.imwrite(os.path.join(total_img_dir, f"optical_flow_img_y_{TIMESTEP}.png"), optical_flow_img_y)
+
+            # np.save(file=os.path.join(total_img_dir, f"optical_flow_img_x_{TIMESTEP}"), arr=optical_flow_img_x)
+            # np.save(file=os.path.join(total_npy_dir, f"optical_flow_img_y_{TIMESTEP}"), arr=optical_flow_img_y)
+
+            TIMESTEP += 1
+
+        cv2.imshow('img_horizontal', optical_flow_img_x)
+        cv2.imshow('img_vertical', optical_flow_img_y)
+        # cv2.waitKey(0)
 
         return task.cont
 
 
 class StimulusModule(Process):
-    def __init__(self, shared):
+    def __init__(self, shared, plot=False):
         Process.__init__(self)
 
         self.shared = shared
+        self.plot = plot
 
     def run(self):
-        app = MyApp(self.shared)
+        app = MyApp(self.shared, self.plot)
         app.run()

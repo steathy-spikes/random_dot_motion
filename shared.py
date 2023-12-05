@@ -5,25 +5,29 @@ import time
 from stimulus_module import StimulusModule
 import pickle
 
+
 class Shared():
     def __init__(self):
-        self.window_properties_x = Value('i', 0)
-        self.window_properties_y = Value('i', 0)
-        self.window_properties_width = Value('i', 800)
-        self.window_properties_height = Value('i', 800)
+        # MAIN PARAMETERS
+        self.stimulus_properties_direction_of_dots = Value('d', 45.0)
+        self.stimulus_properties_coherence_of_dots = Value('d', 10)
+        self.stimulus_properties_lifetime_of_dots = Value('d', 1.2)
+        self.stimulus_properties_speed_of_dots = Value('d', 1.0)
+
+        self.window_properties_x = Value('i', 1400)
+        self.window_properties_y = Value('i', 600)
+        self.window_properties_width = Value('i', 300)
+        self.window_properties_height = Value('i', 300)
         self.window_properties_background = Value('d', 0)
-        self.window_properties_radius = Value('d', 1.4)
+        self.window_properties_radius = Value('d', 1)
         self.control_window_position_x = Value('i', 100)
         self.control_window_position_y = Value('i', 100)
 
         self.window_properties_update_requested = Value('b', 0)
 
         self.stimulus_properties_number_of_dots = Value('i', 1000)
-        self.stimulus_properties_size_of_dots = Value('d', 0.1)
-        self.stimulus_properties_speed_of_dots = Value('d', 0.3)
-        self.stimulus_properties_direction_of_dots = Value('d', 0.0)
-        self.stimulus_properties_coherence_of_dots = Value('d', 50)
-        self.stimulus_properties_lifetime_of_dots = Value('d', 0.2)
+        self.stimulus_properties_size_of_dots = Value('d', 0.01)
+
         self.stimulus_properties_brightness_of_dots = Value('d', 1.0)
 
         self.stimulus_properties_update_requested = Value('b', 0)
@@ -80,5 +84,5 @@ class Shared():
         except Exception as e:
             print(e)
 
-    def start_threads(self):
-        StimulusModule(self).start()
+    def start_threads(self, plot):
+        StimulusModule(self, plot=plot).start()
